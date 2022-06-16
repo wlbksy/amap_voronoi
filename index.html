@@ -1,0 +1,152 @@
+<html>
+
+<head>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.8.0/dist/leaflet.css"
+        integrity="sha512-hoalWLoI8r4UszCkZ5kL8vayOGVae1oxXe/2A4AO6J9+580uKHDO3JdHb7NzwwzK5xr/Fs0W40kiNHxM9vyTtQ=="
+        crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.8.0/dist/leaflet.js"
+        integrity="sha512-BB3hKbKWOc9Ez/TAwyWxNXeoV9c1v6FIeYiBieIWkpLjauysF18NzgR1MBNBXf8/KABdlkX68nAhlwcDFLGPCQ=="
+        crossorigin=""></script>
+
+    <script src="dist.min.js"></script>
+    <!-- <script src="https://unpkg.com/deck.gl@latest/dist.min.js"></script> -->
+
+    <script src="https://unpkg.com/deck.gl-leaflet@1.2.1/dist/deck.gl-leaflet.min.js"></script>
+
+    <style>
+        #map {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+</body>
+
+<script type="text/javascript">
+    const geojson_fn = './geojson.json';
+
+    const map = L.map(document.getElementById('map'), {
+        center: [39.907957, 116.397498],
+        zoom: 4,
+    });
+
+    var tiles = L.tileLayer('http://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x={x}&y={y}&z={z}', {
+        "subdomains": ["1", "2", "3", "4"],
+    }).addTo(map);
+
+
+    const deckLayer = new DeckGlLeaflet.LeafletLayer({
+        views: [
+            new deck.MapView({
+                repeat: true
+            })
+        ]
+        // getTooltip: ({ object }) => object && `${object.properties.value}`
+    });
+
+    map.addLayer(deckLayer);
+
+    function fit_geojson(main_bound, g) {
+        switch (g.type) {
+            case 'Point':
+                let p = g.coordinates;
+                main_bound.extend([p[1], p[0]]);
+                break;
+            case 'LineString':
+                for (let p of g.coordinates) {
+                    main_bound.extend([p[1], p[0]]);
+                }
+                break;
+            case 'Polygon':
+                for (let p of g.coordinates[0]) {
+                    main_bound.extend([p[1], p[0]]);
+                }
+                break;
+            case 'MultiPoint':
+                for (let p of g.coordinates) {
+                    main_bound.extend([p[1], p[0]]);
+                }
+                break;
+            case 'MultiLineString':
+                for (let line of g.coordinates) {
+                    for (let p of line) {
+                        main_bound.extend([p[1], p[0]]);
+                    }
+                }
+                break;
+            case 'MultiPolygon':
+                for (let polygon of g.coordinates) {
+                    for (let p of polygon[0]) {
+                        main_bound.extend([p[1], p[0]]);
+                    }
+                }
+                break;
+            case 'GeometryCollection':
+                for (let geometry of g.geometries) {
+                    main_bound = fit_geojson(main_bound, geometry);
+                }
+                break;
+            case 'Feature':
+                main_bound = fit_geojson(main_bound, g.geometry);
+                break;
+            case 'FeatureCollection':
+                for (let f of g.features) {
+                    main_bound = fit_geojson(main_bound, f);
+                }
+                break;
+
+            default:
+                break;
+        }
+        console.log(main_bound);
+        return main_bound;
+    }
+
+
+    function fit_data_bounds(data, ctx) {
+        let main_bound = L.latLngBounds();
+
+        main_bound = fit_geojson(main_bound, data);
+
+        if (!main_bound.isValid()) {
+            main_bound.extend([0, 70]);
+            main_bound.extend([55, 140]);
+        }
+        map.fitBounds(main_bound);
+    }
+
+    function update() {
+        let layer = new deck.GeoJsonLayer({
+            id: 'geojson',
+            data: geojson_fn,
+            opacity: 0.8,
+            extruded: false,
+            wireframe: true,
+            stroked: true,
+            getFillColor: [200, 120, 80],
+            getLineColor: [128, 0, 240],
+            getLineWidth: 2,
+            lineWidthMinPixels: 2,
+            getPointRadius: 2,
+            pointRadiusMinPixels: 2,
+            pickable: true,
+            getElevation: 1,
+            lineWidthScale: 10,
+            onDataLoad: fit_data_bounds
+        })
+
+        deckLayer.setProps({ layers: [layer] });
+    };
+
+    update();
+
+
+</script>
+
+</html>
